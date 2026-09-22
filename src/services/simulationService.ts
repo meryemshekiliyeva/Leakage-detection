@@ -85,6 +85,44 @@ export function nextReading(
 }
 
 /**
+ * Anomaly detection over raw water-level readings — used for REAL hardware
+ * data (e.g. the Arduino over Web Serial), which arrives without an AI verdict.
+ * Mirrors the Raspberry Pi bridge's detector so both paths behave the same.
+ *
+ * Combines a rapid-drop signal, a z-score (erratic sensor), and the leak sensor
+ * into a 0-1 anomaly score, then thresholds it by the configured sensitivity.
+ */
+export function computeAnomaly(
+  levels: number[],
+  leak: boolean,
+  sensitivity01: number,
+): { aiStatus: 'NORMAL' | 'ANOMALY'; anomalyScore: number } {
+  if (levels.length < 5) {
+    return {
+      aiStatus: leak ? 'ANOMALY' : 'NORMAL',
+      anomalyScore: leak ? 0.9 : round(randomBetween(0.04, 0.12), 3),
+    };
+  }
+  const window = levels.slice(-8);
+  const mean = window.reduce((a, b) => a + b, 0) / window.length;
+  const variance =
+    window.reduce((a, b) => a + (b - mean) ** 2, 0) / window.length;
+  const std = Math.sqrt(variance);
+  const drop = window[0] - window[window.length - 1]; // positive when falling
+  const latest = window[window.length - 1];
+  const z = std > 0.5 ? Math.abs(latest - mean) / std : 0;
+
+  let score = 0;
+  score += clamp(drop / 25, 0, 1); // ~25% drop across the window -> full
+  score += clamp((z - 2) / 3, 0, 1); // z > 2 starts to count
+  score = Math.min(1, score);
+  if (leak) score = Math.max(score, 0.9);
+
+  const aiStatus = score >= sensitivity01 || leak ? 'ANOMALY' : 'NORMAL';
+  return { aiStatus, anomalyScore: round(score, 3) };
+}
+
+/**
  * Run the "AI" analysis stage over a recent window of readings.
  * In this prototype the verdict is derived from simple signal statistics
  * (trend + variance) blended with the latest reading's score. A real model

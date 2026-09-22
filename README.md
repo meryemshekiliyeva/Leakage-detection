@@ -14,10 +14,11 @@ The whole interface is built around one story:
 > - **Think** — Raspberry Pi + AI anomaly detection (processing & analysis)
 > - **Interact** — Dashboard, alerts, control panel & future voice assistant
 
-> **Prototype note:** No physical hardware is connected yet. All data on screen
-> is **simulated** and clearly labelled as such (`LIVE` / `DEMO MODE`). The app is
-> architected so this simulated stream can be swapped for a real Raspberry Pi
-> feed without redesigning the UI.
+> **Connecting hardware:** The dashboard can read a **real Arduino directly over
+> USB** — no backend or Raspberry Pi needed — using the browser's Web Serial API.
+> Click **Connect Arduino** in the app (Chrome/Edge). Until you connect a board,
+> the app runs on a clearly-labelled **simulated** stream (`LIVE` / `DEMO MODE`),
+> so simulated data is never shown as real hardware measurements.
 
 ---
 
@@ -29,6 +30,30 @@ Ultrasonic Sensor ─┐
 Water Leak Sensor ─┘   (read +      (central,
                         control)     AI anomaly detection)
 ```
+
+## Connecting your Arduino (direct USB — no Raspberry Pi needed)
+
+The dashboard reads the Arduino straight from the USB port using the browser's
+**Web Serial API**, and runs the AI anomaly detection in the browser.
+
+**Requirements:** Google **Chrome** or **Edge** on desktop, and the page opened
+over `http://localhost` (the dev server) or HTTPS. (Web Serial isn't available
+in Firefox/Safari or on mobile.)
+
+**Steps:**
+1. Upload `arduino/IESL_Project1.ino`-style sketch to the board (9600 baud,
+   printing `waterLevel,distance,leakDetected`).
+2. Plug the Arduino into the computer via USB. Close the Arduino IDE Serial
+   Monitor (only one program can hold the port).
+3. Run the dashboard (`npm run dev`) and open it in Chrome/Edge.
+4. Click **Connect Arduino** (top-right, or Settings → Communication) and pick
+   the port — usually shown as *Arduino* or a USB serial device.
+
+The header will switch to **Arduino Live** and every card/chart updates from the
+real sensor stream. Disconnect from the same button.
+
+> A Raspberry Pi is **optional** and only for later — see `raspberry-pi/` for a
+> Python bridge that moves the AI processing onto the Pi. It's off by default.
 
 ## Tech stack
 

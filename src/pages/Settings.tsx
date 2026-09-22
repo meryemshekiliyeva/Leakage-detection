@@ -12,6 +12,7 @@ import {
 import { useSystem } from '@/store/SystemContext';
 import { PageHeader } from '@/components/common/PageHeader';
 import { StatusBadge } from '@/components/common/StatusBadge';
+import { ArduinoConnectButton } from '@/components/common/ArduinoConnectButton';
 
 function Section({
   icon: Icon,
@@ -243,8 +244,10 @@ export function Settings() {
         <Section
           icon={Wifi}
           title="Communication"
-          description="Live link status (read-only)"
+          description="Connect the Arduino and view link status"
         >
+          <ArduinoConnectButton variant="full" />
+          <div className="my-1 border-t border-white/5" />
           <ConnRow
             icon={Wifi}
             label="Wi-Fi"

@@ -4,6 +4,7 @@ import { useNow } from '@/hooks/useNow';
 import { timeAgo } from '@/lib/format';
 import { StatusBadge, type Tone } from '@/components/common/StatusBadge';
 import { DataSourceBadge } from '@/components/common/DataSourceBadge';
+import { ArduinoConnectButton } from '@/components/common/ArduinoConnectButton';
 import type { ConnectionState, SystemState } from '@/types';
 
 interface Props {
@@ -91,6 +92,8 @@ export function Header({ onMenuClick, onDemoClick }: Props) {
           </div>
 
           <DataSourceBadge compact />
+
+          <ArduinoConnectButton variant="compact" />
 
           <button
             onClick={onDemoClick}

@@ -1,0 +1,4 @@
+# Smart Water AI - Raspberry Pi bridge dependencies
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pyserial>=3.5
