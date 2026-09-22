@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #070b18;
+  color: #e2e8f0;
+}
+
+/* Subtle animated background grid for the engineering / IoT feel */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    radial-gradient(circle at 15% 10%, rgba(26, 166, 170, 0.08), transparent 40%),
+    radial-gradient(circle at 85% 0%, rgba(14, 165, 233, 0.08), transparent 45%),
+    linear-gradient(rgba(148, 163, 184, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+  pointer-events: none;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #22304f;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2d3d63;
+  background-clip: padding-box;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-white/5 bg-navy-850/80 shadow-card backdrop-blur-sm;
+  }
+  .card-hover {
+    @apply transition-all duration-200 hover:border-white/10 hover:shadow-glow;
+  }
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-[0.18em] text-slate-400;
+  }
+  .stat-value {
+    @apply font-mono font-semibold tabular-nums text-white;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-accent-500/50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent-500 text-navy-950 hover:bg-accent-400;
+  }
+  .btn-ghost {
+    @apply btn border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10;
+  }
+}
