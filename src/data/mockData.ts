@@ -17,12 +17,18 @@ import type {
 
 // --- Physical model defaults -----------------------------------------------
 
-/** Default tank height in cm. With a full tank at 100cm, level% maps cleanly
- *  to distance: 74% level => 26cm distance (matches the reference design). */
-export const DEFAULT_TANK_HEIGHT = 100;
+/** Default tank height in cm. Matches the Arduino sketch (`tankHeight = 21.0`).
+ *  Water level % = ((tankHeight - distance) / tankHeight) * 100, so a 74% level
+ *  corresponds to a distance of ~5.5 cm on this tank. */
+export const DEFAULT_TANK_HEIGHT = 21;
+
+/** Cross-sectional area of the water column in cm^2. Matches the Arduino
+ *  sketch's volume factor (`waterVolume = (tankHeight - distance) * 37.4`). */
+export const TANK_CROSS_SECTION_CM2 = 37.4;
 
 export const DEFAULT_SETTINGS: SystemSettings = {
   tankHeight: DEFAULT_TANK_HEIGHT,
+  tankCrossSection: TANK_CROSS_SECTION_CM2,
   samplingInterval: 2,
   ultrasonicOffset: 0,
   leakSensorThreshold: 55,
@@ -50,6 +56,16 @@ export const randomBetween = (min: number, max: number) =>
 /** Convert a water-level percentage to an ultrasonic distance reading (cm). */
 export const levelToDistance = (level: number, tankHeight: number, offset = 0) =>
   round(clamp((tankHeight * (100 - level)) / 100 + offset, 0, tankHeight), 1);
+
+/**
+ * Derive water volume (litres) from the ultrasonic distance, mirroring the
+ * Arduino sketch: waterVolume_cm3 = (tankHeight - distance) * crossSection.
+ */
+export const distanceToVolumeLiters = (
+  distance: number,
+  tankHeight: number,
+  crossSection: number = TANK_CROSS_SECTION_CM2,
+) => round((Math.max(0, tankHeight - distance) * crossSection) / 1000, 2);
 
 // --- The reference "starting point" for the whole system -------------------
 

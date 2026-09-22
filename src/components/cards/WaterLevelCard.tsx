@@ -19,7 +19,13 @@ const ARC_COLOR: Record<Tone, string> = {
   neutral: 'text-accent-400',
 };
 
-export function WaterLevelCard({ reading }: { reading: SensorData }) {
+export function WaterLevelCard({
+  reading,
+  volumeLiters,
+}: {
+  reading: SensorData;
+  volumeLiters?: number;
+}) {
   const status = waterLevelStatus(reading.waterLevel);
   return (
     <StatusCard
@@ -28,9 +34,17 @@ export function WaterLevelCard({ reading }: { reading: SensorData }) {
       tone={status.tone}
       badge={<StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
       footer={
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-400">Distance to surface</span>
-          <span className="stat-value">{reading.distance} cm</span>
+        <div className="space-y-1.5 text-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Distance to surface</span>
+            <span className="stat-value">{reading.distance} cm</span>
+          </div>
+          {volumeLiters !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Volume</span>
+              <span className="stat-value">{volumeLiters.toFixed(2)} L</span>
+            </div>
+          )}
         </div>
       }
     >

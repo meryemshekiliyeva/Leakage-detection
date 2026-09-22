@@ -1,14 +1,20 @@
-import { Ruler, Gauge, Waves, Timer } from 'lucide-react';
+import { Ruler, Gauge, Waves, Timer, Container, Box } from 'lucide-react';
 import { useSystem } from '@/store/SystemContext';
 import { PageHeader } from '@/components/common/PageHeader';
 import { RealTimeWaterChart } from '@/components/charts/RealTimeWaterChart';
 import { TankVisual } from '@/components/common/TankVisual';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { waterLevelStatus } from '@/components/cards/WaterLevelCard';
+import { distanceToVolumeLiters } from '@/data/mockData';
 
 export function WaterLevel() {
   const { currentReading, settings } = useSystem();
   const status = waterLevelStatus(currentReading.waterLevel);
+  const volumeLiters = distanceToVolumeLiters(
+    currentReading.distance,
+    settings.tankHeight,
+    settings.tankCrossSection,
+  );
 
   const metrics = [
     {
@@ -22,9 +28,19 @@ export function WaterLevel() {
       value: `${currentReading.distance} cm`,
     },
     {
+      icon: Container,
+      label: 'Water Volume',
+      value: `${volumeLiters.toFixed(2)} L`,
+    },
+    {
       icon: Waves,
       label: 'Tank Height',
       value: `${settings.tankHeight} cm`,
+    },
+    {
+      icon: Box,
+      label: 'Cross-section',
+      value: `${settings.tankCrossSection} cm²`,
     },
     {
       icon: Timer,
@@ -54,6 +70,9 @@ export function WaterLevel() {
             <div className="section-title">Current Fill</div>
             <div className="stat-value mt-1 text-3xl text-accent-400">
               {Math.round(currentReading.waterLevel)}%
+            </div>
+            <div className="mt-1 text-xs text-slate-400">
+              ≈ {volumeLiters.toFixed(2)} L
             </div>
           </div>
         </div>

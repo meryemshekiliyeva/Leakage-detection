@@ -8,12 +8,18 @@ import { AIStatusCard } from '@/components/cards/AIStatusCard';
 import { SystemStatusCard } from '@/components/cards/SystemStatusCard';
 import { RealTimeWaterChart } from '@/components/charts/RealTimeWaterChart';
 import { AlertCard } from '@/components/alerts/AlertCard';
+import { distanceToVolumeLiters } from '@/data/mockData';
 
 export function Dashboard() {
-  const { currentReading, aiAnalysis, systemStatus, alerts, resolveAlert } =
+  const { currentReading, aiAnalysis, systemStatus, alerts, resolveAlert, settings } =
     useSystem();
 
   const recentAlerts = alerts.slice(0, 3);
+  const volumeLiters = distanceToVolumeLiters(
+    currentReading.distance,
+    settings.tankHeight,
+    settings.tankCrossSection,
+  );
 
   return (
     <div>
@@ -25,7 +31,7 @@ export function Dashboard() {
 
       {/* Four primary status cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <WaterLevelCard reading={currentReading} />
+        <WaterLevelCard reading={currentReading} volumeLiters={volumeLiters} />
         <LeakStatusCard reading={currentReading} />
         <AIStatusCard analysis={aiAnalysis} />
         <SystemStatusCard status={systemStatus} />

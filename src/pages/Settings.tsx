@@ -157,11 +157,22 @@ export function Settings() {
           <SliderField
             label="Tank Height"
             value={settings.tankHeight}
-            min={20}
+            min={5}
             max={300}
-            step={5}
+            step={1}
             unit=" cm"
             onChange={(tankHeight) => updateSettings({ tankHeight })}
+          />
+          <SliderField
+            label="Tank Cross-section"
+            value={settings.tankCrossSection}
+            min={1}
+            max={200}
+            step={0.1}
+            unit=" cm²"
+            onChange={(v) =>
+              updateSettings({ tankCrossSection: Math.round(v * 10) / 10 })
+            }
           />
           <SliderField
             label="Sampling Interval"

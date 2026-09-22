@@ -83,7 +83,8 @@ export type DataSource = 'SIMULATED' | 'HARDWARE';
 
 export interface SystemSettings {
   // Sensor configuration
-  tankHeight: number; // cm
+  tankHeight: number; // cm (matches the Arduino sketch's tankHeight)
+  tankCrossSection: number; // cm^2 — water column area, used to derive volume
   samplingInterval: number; // seconds
   ultrasonicOffset: number; // cm calibration offset
   leakSensorThreshold: number; // 0-100 sensitivity
