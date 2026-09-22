@@ -3,13 +3,12 @@
 //
 // Two data sources feed the SAME pipeline (applyReading):
 //   1. Simulation  — the built-in mock stream (default, no hardware needed)
-//   2. Live bridge — real Arduino readings via the Raspberry Pi bridge, used
-//                    automatically when VITE_LIVE_API_URL is configured and the
-//                    bridge is reachable (see src/services/liveService.ts).
+//   2. Arduino     — real readings from the Arduino over USB (Web Serial),
+//                    connected from the "Connect Arduino" button.
 //
-// When the live bridge is connected (and Demo Mode is off) it drives the app
-// and the simulation idles. Otherwise the simulation runs. Demo Mode always
-// uses the simulation so presentations work with or without hardware.
+// When the Arduino is connected (and Demo Mode is off) it drives the app and
+// the simulation idles. Otherwise the simulation runs. Demo Mode always uses
+// the simulation so presentations work with or without hardware.
 // ---------------------------------------------------------------------------
 
 import {
@@ -46,11 +45,6 @@ import { analyze, computeAnomaly, nextReading } from '@/services/simulationServi
 import { evaluateAlert } from '@/services/alertService';
 import { deriveSystemStatus } from '@/services/systemService';
 import {
-  createLiveConnection,
-  getLiveApiUrl,
-  type LiveConnection,
-} from '@/services/liveService';
-import {
   connectArduino as openArduinoPort,
   isUserCancel,
   isWebSerialSupported,
@@ -85,8 +79,6 @@ interface SystemContextValue {
   demoMode: boolean;
   scenario: Scenario;
   paused: boolean;
-  liveConnected: boolean;
-  liveSource: 'hardware' | 'mock' | null;
   // Direct Arduino (Web Serial / USB)
   serialSupported: boolean;
   serialConnected: boolean;
@@ -113,8 +105,6 @@ interface State {
   demoMode: boolean;
   scenario: Scenario;
   paused: boolean;
-  liveConnected: boolean;
-  liveSource: 'hardware' | 'mock' | null;
   serialConnected: boolean;
   serialError: string | null;
 }
@@ -144,8 +134,6 @@ function buildInitialState(): State {
     demoMode: false,
     scenario: 'NORMAL',
     paused: false,
-    liveConnected: false,
-    liveSource: null,
     serialConnected: false,
     serialError: null,
   };
@@ -238,7 +226,6 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   // Refs the async handlers read without re-subscribing.
   const demoRef = useRef(state.demoMode);
   const pausedRef = useRef(state.paused);
-  const liveConnectedRef = useRef(state.liveConnected);
   const settingsRef = useRef(state.settings);
   useEffect(() => {
     demoRef.current = state.demoMode;
@@ -247,16 +234,11 @@ export function SystemProvider({ children }: { children: ReactNode }) {
     pausedRef.current = state.paused;
   }, [state.paused]);
   useEffect(() => {
-    liveConnectedRef.current = state.liveConnected;
-  }, [state.liveConnected]);
-  useEffect(() => {
     settingsRef.current = state.settings;
   }, [state.settings]);
 
   const tickRef = useRef(0);
   const spontaneousRef = useRef(0); // remaining spontaneous-anomaly ticks (sim)
-  const connRef = useRef<Connections>(ALL_CONNECTED);
-  const lastLiveApplyRef = useRef(0);
 
   // Direct Arduino (Web Serial) refs.
   const serialSupported = useMemo(() => isWebSerialSupported(), []);
@@ -271,13 +253,8 @@ export function SystemProvider({ children }: { children: ReactNode }) {
 
   const tick = useCallback(() => {
     if (pausedRef.current) return;
-    // When real hardware drives the app (and we're not demoing), idle the sim.
-    if (
-      !demoRef.current &&
-      (serialConnectedRef.current || liveConnectedRef.current)
-    ) {
-      return;
-    }
+    // When the Arduino drives the app (and we're not demoing), idle the sim.
+    if (!demoRef.current && serialConnectedRef.current) return;
 
     const prev = stateRef.current;
     const { settings, demoMode, scenario } = prev;
@@ -299,8 +276,6 @@ export function SystemProvider({ children }: { children: ReactNode }) {
       settings,
       tickRef.current++,
     );
-    // Simulation assumes all links are up.
-    connRef.current = ALL_CONNECTED;
     const ns = applyReading(prev, reading, ALL_CONNECTED);
     stateRef.current = ns;
     setState(ns);
@@ -311,56 +286,6 @@ export function SystemProvider({ children }: { children: ReactNode }) {
     const id = window.setInterval(tick, intervalMs);
     return () => window.clearInterval(id);
   }, [state.settings.samplingInterval, tick]);
-
-  // --- Live bridge connection ---------------------------------------------
-
-  useEffect(() => {
-    const url = getLiveApiUrl();
-    if (!url) return; // No backend configured -> pure simulation.
-
-    let conn: LiveConnection | null = null;
-    conn = createLiveConnection(url, {
-      onOpen: () => {
-        setState((p) => ({ ...p, liveConnected: true }));
-      },
-      onClose: () => {
-        connRef.current = ALL_CONNECTED;
-        setState((p) => ({ ...p, liveConnected: false, liveSource: null }));
-      },
-      onReading: (reading, meta) => {
-        connRef.current =
-          meta.source === 'hardware'
-            ? {
-                arduino: meta.arduinoConnected ? 'CONNECTED' : 'DISCONNECTED',
-                raspberryPi: 'CONNECTED',
-                wifi: 'CONNECTED',
-              }
-            : ALL_CONNECTED;
-
-        // Throttle ingestion to roughly the sampling interval so the UI cadence
-        // matches the dashboard rather than the Arduino's raw ~10 Hz output.
-        const gap = settingsRef.current.samplingInterval * 1000 * 0.85;
-        const nowMs = Date.now();
-        const applyNow = nowMs - lastLiveApplyRef.current >= gap;
-
-        setState((p) => {
-          const sourceChanged = p.liveSource !== meta.source;
-          // Demo Mode / pause: don't ingest hardware, just track connection.
-          if (demoRef.current || pausedRef.current || !applyNow) {
-            if (sourceChanged || !p.liveConnected) {
-              return { ...p, liveSource: meta.source, liveConnected: true };
-            }
-            return p;
-          }
-          lastLiveApplyRef.current = nowMs;
-          const ns = applyReading(p, reading, connRef.current);
-          return { ...ns, liveSource: meta.source, liveConnected: true };
-        });
-      },
-    });
-
-    return () => conn?.close();
-  }, []);
 
   // --- Direct Arduino (Web Serial) ----------------------------------------
 
@@ -396,7 +321,6 @@ export function SystemProvider({ children }: { children: ReactNode }) {
 
   const handleSerialClose = useCallback((err?: string) => {
     serialHandleRef.current = null;
-    connRef.current = ALL_CONNECTED;
     setState((p) => ({
       ...p,
       serialConnected: false,
@@ -420,7 +344,6 @@ export function SystemProvider({ children }: { children: ReactNode }) {
         onClose: handleSerialClose,
       });
       serialHandleRef.current = handle;
-      connRef.current = ALL_CONNECTED;
       lastSerialApplyRef.current = 0;
       setState((p) => ({ ...p, serialConnected: true, serialError: null }));
     } catch (err) {
@@ -490,11 +413,7 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const dataSource: DataSource =
-    !state.demoMode &&
-    (state.serialConnected ||
-      (state.liveConnected && state.liveSource === 'hardware'))
-      ? 'HARDWARE'
-      : 'SIMULATED';
+    !state.demoMode && state.serialConnected ? 'HARDWARE' : 'SIMULATED';
 
   const value = useMemo<SystemContextValue>(
     () => ({
@@ -509,8 +428,6 @@ export function SystemProvider({ children }: { children: ReactNode }) {
       demoMode: state.demoMode,
       scenario: state.scenario,
       paused: state.paused,
-      liveConnected: state.liveConnected,
-      liveSource: state.liveSource,
       serialSupported,
       serialConnected: state.serialConnected,
       serialError: state.serialError,

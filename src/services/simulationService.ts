@@ -2,9 +2,10 @@
 // Simulation engine.
 //
 // Produces the next sensor reading from the previous one, driven by the active
-// scenario. This is the ONLY place that "invents" data. When a real backend is
-// connected, the sensorService stops calling this and streams hardware data
-// instead — the rest of the app is unaffected.
+// scenario. This is the ONLY place that "invents" data. When the Arduino is
+// connected over USB (Web Serial), the app streams real readings instead and
+// this simulation idles — the rest of the app is unaffected. This module also
+// exports computeAnomaly(), the detector used on real hardware readings.
 // ---------------------------------------------------------------------------
 
 import type { AIAnalysis, Scenario, SensorData, SystemSettings } from '@/types';
