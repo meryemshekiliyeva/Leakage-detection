@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import type { SensorData, TimeRange } from '@/types';
-import { seedHistory, generateHistoricalData } from '@/data/mockData';
 import type { ChartPoint } from '@/components/charts/SensorChart';
 
 export interface SeriesResult {
@@ -11,12 +10,8 @@ export interface SeriesResult {
   avg: number;
 }
 
-function label(iso: string, range: TimeRange): string {
-  const d = new Date(iso);
-  if (range === '1h' || range === '24h') {
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-  }
-  return d.toLocaleTimeString([], {
+function label(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -24,34 +19,27 @@ function label(iso: string, range: TimeRange): string {
   });
 }
 
+const RANGE_POINTS: Record<TimeRange, number> = {
+  '1m': 30,
+  '10m': 90,
+  '1h': 150,
+  '24h': 150,
+};
+
 /**
- * Builds the water-level chart series for a given time range.
- *
- * Short ranges (1m / 10m) use the LIVE rolling history from context so the
- * chart animates with the stream. Longer ranges (1h / 24h) represent stored
- * history and use a seeded dataset — this mirrors how a real deployment would
- * fetch aggregated history from the Raspberry Pi rather than keep every raw
- * sample in memory.
+ * Builds the water-level chart series from the LIVE rolling history only, so the
+ * chart always reflects real data (from the Arduino or Demo Mode) and never
+ * invents values. The range simply selects how many recent points to show.
  */
 export function useWaterLevelSeries(
   liveHistory: SensorData[],
   range: TimeRange,
-  tankHeight: number,
 ): SeriesResult {
   return useMemo(() => {
-    let source: SensorData[];
-    if (range === '1m') {
-      source = liveHistory.slice(-30);
-    } else if (range === '10m') {
-      source = liveHistory.slice(-120);
-    } else if (range === '1h') {
-      source = seedHistory(60, 60, tankHeight);
-    } else {
-      source = generateHistoricalData(96, 24, tankHeight);
-    }
+    const source = liveHistory.slice(-RANGE_POINTS[range]);
 
     const points: ChartPoint[] = source.map((r) => ({
-      label: label(r.timestamp, range),
+      label: label(r.timestamp),
       value: r.waterLevel,
     }));
 
@@ -70,5 +58,5 @@ export function useWaterLevelSeries(
       max: Math.round(max),
       avg: Math.round(avg),
     };
-  }, [liveHistory, range, tankHeight]);
+  }, [liveHistory, range]);
 }

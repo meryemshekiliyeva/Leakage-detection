@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Waves } from 'lucide-react';
+import { Waves, Usb } from 'lucide-react';
 import { useSystem } from '@/store/SystemContext';
 import { useWaterLevelSeries } from '@/hooks/useWaterLevelSeries';
 import { SensorChart } from './SensorChart';
@@ -23,11 +23,9 @@ export function RealTimeWaterChart({
   title = 'Real-Time Water Level',
   height = 300,
 }: Props) {
-  const { history, settings, currentReading } = useSystem();
+  const { history, currentReading, hasData } = useSystem();
   const [range, setRange] = useState<TimeRange>('10m');
-  const series = useWaterLevelSeries(history, range, settings.tankHeight);
-
-  const live = range === '1m' || range === '10m';
+  const series = useWaterLevelSeries(history, range);
 
   return (
     <div className="card p-5">
@@ -38,9 +36,7 @@ export function RealTimeWaterChart({
           </div>
           <div>
             <h2 className="text-base font-semibold text-white">{title}</h2>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              {live ? 'Live rolling window' : 'Stored history'}
-            </div>
+            <div className="text-xs text-slate-400">Live rolling window</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -63,29 +59,42 @@ export function RealTimeWaterChart({
         </div>
       </div>
 
-      <SensorChart
-        data={series.points}
-        color="#3cc6c6"
-        height={height}
-        unit="%"
-        yDomain={[0, 100]}
-        seriesName="Water Level"
-        gradientId="waterLevelGradient"
-        referenceLines={[
-          { y: 20, label: 'Low', color: 'rgba(245,158,11,0.55)' },
-        ]}
-      />
-
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat
-          label="Current"
-          value={`${live ? Math.round(currentReading.waterLevel) : series.current}%`}
-          valueClass="text-accent-400"
-        />
-        <Stat label="Minimum" value={`${series.min}%`} />
-        <Stat label="Maximum" value={`${series.max}%`} />
-        <Stat label="Average" value={`${series.avg}%`} />
-      </div>
+      {hasData ? (
+        <>
+          <SensorChart
+            data={series.points}
+            color="#3cc6c6"
+            height={height}
+            unit="%"
+            yDomain={[0, 100]}
+            seriesName="Water Level"
+            gradientId="waterLevelGradient"
+            referenceLines={[{ y: 20, label: 'Low', color: 'rgba(245,158,11,0.55)' }]}
+          />
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Stat
+              label="Current"
+              value={`${Math.round(currentReading.waterLevel)}%`}
+              valueClass="text-accent-400"
+            />
+            <Stat label="Minimum" value={`${series.min}%`} />
+            <Stat label="Maximum" value={`${series.max}%`} />
+            <Stat label="Average" value={`${series.avg}%`} />
+          </div>
+        </>
+      ) : (
+        <div
+          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/10 bg-navy-900/40 text-center"
+          style={{ height: height + 76 }}
+        >
+          <Usb className="h-8 w-8 text-slate-600" />
+          <p className="text-sm font-medium text-slate-300">Waiting for Arduino…</p>
+          <p className="max-w-xs text-xs text-slate-500">
+            Connect the Arduino (button in the top bar) to see the live water
+            level, or turn on Demo Mode to preview.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

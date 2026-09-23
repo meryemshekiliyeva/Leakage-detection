@@ -1,13 +1,13 @@
-import { Radio, FlaskConical, Usb } from 'lucide-react';
+import { FlaskConical, Usb, WifiOff } from 'lucide-react';
 import { useSystem } from '@/store/SystemContext';
 import { SCENARIOS } from '@/data/mockData';
 
 /**
  * Honest data-source indicator, so simulated data is never mistaken for real
  * hardware measurements:
- *   - DEMO MODE  : scenario-driven data for a presentation
- *   - LIVE Arduino : real readings from the Arduino over USB (Web Serial)
- *   - LIVE simulated : the built-in mock stream (no hardware connected)
+ *   - DEMO MODE     : scenario-driven data for a presentation
+ *   - LIVE · Arduino : real readings from the Arduino over USB (Web Serial)
+ *   - NO SIGNAL     : nothing connected — the app is waiting for the Arduino
  */
 export function DataSourceBadge({ compact = false }: { compact?: boolean }) {
   const { demoMode, scenario, dataSource } = useSystem();
@@ -31,34 +31,38 @@ export function DataSourceBadge({ compact = false }: { compact?: boolean }) {
     );
   }
 
-  const hardware = dataSource === 'HARDWARE';
+  // Real hardware connected.
+  if (dataSource === 'HARDWARE') {
+    return (
+      <div
+        className="inline-flex items-center gap-2 rounded-full border border-normal-500/30 bg-normal-500/10 px-3 py-1.5"
+        title="Live readings from the Arduino over USB."
+      >
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-pulseRing rounded-full bg-normal-500 opacity-70" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-normal-500" />
+        </span>
+        <Usb className="h-3.5 w-3.5 text-normal-400" />
+        <span className="text-xs font-bold uppercase tracking-wider text-normal-400">
+          Live
+        </span>
+        {!compact && (
+          <span className="text-[11px] font-medium text-normal-400/70">· Arduino</span>
+        )}
+      </div>
+    );
+  }
 
+  // Nothing connected — waiting for the Arduino.
   return (
     <div
-      className="inline-flex items-center gap-2 rounded-full border border-normal-500/30 bg-normal-500/10 px-3 py-1.5"
-      title={
-        hardware
-          ? 'Live readings from the Arduino over USB.'
-          : 'Live simulated stream. No hardware connected — plug in the Arduino and click Connect.'
-      }
+      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5"
+      title="No hardware connected. Plug in the Arduino and click Connect, or turn on Demo Mode."
     >
-      <span className="relative flex h-2 w-2">
-        <span className="absolute inline-flex h-full w-full animate-pulseRing rounded-full bg-normal-500 opacity-70" />
-        <span className="relative inline-flex h-2 w-2 rounded-full bg-normal-500" />
+      <WifiOff className="h-3.5 w-3.5 text-slate-400" />
+      <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+        No Signal
       </span>
-      {hardware ? (
-        <Usb className="h-3.5 w-3.5 text-normal-400" />
-      ) : (
-        <Radio className="h-3.5 w-3.5 text-normal-400" />
-      )}
-      <span className="text-xs font-bold uppercase tracking-wider text-normal-400">
-        Live
-      </span>
-      {!compact && (
-        <span className="text-[11px] font-medium text-normal-400/70">
-          · {hardware ? 'Arduino' : 'simulated'}
-        </span>
-      )}
     </div>
   );
 }

@@ -10,10 +10,19 @@ import { clockTime } from '@/lib/format';
 type Action = 'water' | 'sensor' | 'security' | 'system';
 
 export function ControlPanel() {
-  const { currentReading, aiAnalysis, systemStatus } = useSystem();
+  const { currentReading, aiAnalysis, systemStatus, hasData } = useSystem();
   const [action, setAction] = useState<Action | null>(null);
 
   function readout(): string[] {
+    if (!action) return [];
+    if (!hasData) {
+      return [
+        'Arduino not connected.',
+        '',
+        'Connect it from the top bar to read',
+        'live values — or turn on Demo Mode.',
+      ];
+    }
     const level = Math.round(currentReading.waterLevel);
     const status = waterLevelStatus(currentReading.waterLevel).label;
     switch (action) {
@@ -116,9 +125,17 @@ export function ControlPanel() {
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-300">
                 System Readout
               </span>
-              <span className="ml-auto flex items-center gap-1.5 text-[11px] text-normal-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-normal-500 animate-blink" />
-                online
+              <span
+                className={`ml-auto flex items-center gap-1.5 text-[11px] ${
+                  hasData ? 'text-normal-400' : 'text-slate-500'
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    hasData ? 'bg-normal-500 animate-blink' : 'bg-slate-500'
+                  }`}
+                />
+                {hasData ? 'online' : 'offline'}
               </span>
             </div>
             <div className="min-h-[220px] bg-navy-950/60 p-4 font-mono text-sm">

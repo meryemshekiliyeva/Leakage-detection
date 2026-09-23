@@ -1,14 +1,13 @@
 // ---------------------------------------------------------------------------
 // SystemContext — the single source of truth + the real-time data pipeline.
 //
-// Two data sources feed the SAME pipeline (applyReading):
-//   1. Simulation  — the built-in mock stream (default, no hardware needed)
-//   2. Arduino     — real readings from the Arduino over USB (Web Serial),
-//                    connected from the "Connect Arduino" button.
+// Data on screen comes from ONE of two sources, both feeding applyReading():
+//   1. Arduino  — real readings over USB (Web Serial), from "Connect Arduino"
+//   2. Demo Mode — the built-in simulation, for presentations without hardware
 //
-// When the Arduino is connected (and Demo Mode is off) it drives the app and
-// the simulation idles. Otherwise the simulation runs. Demo Mode always uses
-// the simulation so presentations work with or without hardware.
+// If NEITHER is active the app shows a "Waiting for Arduino…" state with no
+// values — it never invents random numbers. So: connect the Arduino to see real
+// data, or turn on Demo Mode to run a scripted scenario.
 // ---------------------------------------------------------------------------
 
 import {
@@ -33,13 +32,9 @@ import type {
   SystemStatus,
 } from '@/types';
 import {
-  BASELINE_LEVEL,
   DEFAULT_SETTINGS,
-  makeReading,
   round,
-  seedAlerts,
   seedHistory,
-  seedLeakEvents,
 } from '@/data/mockData';
 import { analyze, computeAnomaly, nextReading } from '@/services/simulationService';
 import { evaluateAlert } from '@/services/alertService';
@@ -66,6 +61,86 @@ const ALL_CONNECTED: Connections = {
   wifi: 'CONNECTED',
 };
 
+/** A neutral placeholder reading used while there is no live data. */
+function emptyReading(settings: SystemSettings): SensorData {
+  return {
+    timestamp: new Date().toISOString(),
+    waterLevel: 0,
+    distance: settings.tankHeight,
+    leakDetected: false,
+    aiStatus: 'NORMAL',
+    anomalyScore: 0,
+  };
+}
+
+/** The "no data yet — waiting for the Arduino" slice of state. */
+function awaitingReset(
+  settings: SystemSettings,
+): Pick<State, 'history' | 'currentReading' | 'aiAnalysis' | 'systemStatus'> {
+  const now = new Date().toISOString();
+  return {
+    history: [],
+    currentReading: emptyReading(settings),
+    aiAnalysis: {
+      status: 'NORMAL',
+      anomalyScore: 0,
+      confidence: 0,
+      pattern: 'Waiting for Arduino…',
+      lastAnalysis: now,
+      possibleCauses: [],
+    },
+    systemStatus: {
+      system: 'OFFLINE',
+      arduino: 'DISCONNECTED',
+      raspberryPi: 'DISCONNECTED',
+      wifi: 'CONNECTED',
+      lastUpdated: now,
+    },
+  };
+}
+
+/** Fresh slice used right after the Arduino connects, before the first reading. */
+function connectingReset(
+  settings: SystemSettings,
+): Pick<State, 'history' | 'currentReading' | 'aiAnalysis' | 'systemStatus'> {
+  const now = new Date().toISOString();
+  return {
+    history: [],
+    currentReading: emptyReading(settings),
+    aiAnalysis: {
+      status: 'NORMAL',
+      anomalyScore: 0,
+      confidence: 0,
+      pattern: 'Connected — waiting for first reading…',
+      lastAnalysis: now,
+      possibleCauses: [],
+    },
+    systemStatus: {
+      system: 'OPERATIONAL',
+      ...ALL_CONNECTED,
+      lastUpdated: now,
+    },
+  };
+}
+
+/** A lively starting slice for Demo Mode, so a demo looks real immediately. */
+function demoSeed(
+  settings: SystemSettings,
+): Pick<State, 'history' | 'currentReading' | 'aiAnalysis' | 'systemStatus'> {
+  const history = seedHistory(40, settings.samplingInterval, settings.tankHeight);
+  const currentReading = history[history.length - 1];
+  return {
+    history,
+    currentReading,
+    aiAnalysis: analyze(history, settings),
+    systemStatus: {
+      system: 'OPERATIONAL',
+      ...ALL_CONNECTED,
+      lastUpdated: currentReading.timestamp,
+    },
+  };
+}
+
 interface SystemContextValue {
   currentReading: SensorData;
   history: SensorData[];
@@ -79,6 +154,10 @@ interface SystemContextValue {
   demoMode: boolean;
   scenario: Scenario;
   paused: boolean;
+  /** True when no data is flowing (no Arduino, no Demo) — show placeholders. */
+  awaitingData: boolean;
+  /** True once there is at least one reading to display. */
+  hasData: boolean;
   // Direct Arduino (Web Serial / USB)
   serialSupported: boolean;
   serialConnected: boolean;
@@ -113,23 +192,12 @@ const SystemContext = createContext<SystemContextValue | null>(null);
 
 function buildInitialState(): State {
   const settings = DEFAULT_SETTINGS;
-  const history = seedHistory(60, settings.samplingInterval, settings.tankHeight);
-  const currentReading =
-    history[history.length - 1] ??
-    makeReading({ waterLevel: BASELINE_LEVEL }, settings.tankHeight);
-  const aiAnalysis = analyze(history, settings);
-  const systemStatus: SystemStatus = {
-    system: 'OPERATIONAL',
-    ...ALL_CONNECTED,
-    lastUpdated: currentReading.timestamp,
-  };
+  // Start empty: no random data. Values appear once the Arduino connects or
+  // Demo Mode is turned on.
   return {
-    currentReading,
-    history,
-    aiAnalysis,
-    systemStatus,
-    alerts: seedAlerts(),
-    leakEvents: seedLeakEvents(),
+    ...awaitingReset(settings),
+    alerts: [],
+    leakEvents: [],
     settings,
     demoMode: false,
     scenario: 'NORMAL',
@@ -238,42 +306,26 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   }, [state.settings]);
 
   const tickRef = useRef(0);
-  const spontaneousRef = useRef(0); // remaining spontaneous-anomaly ticks (sim)
 
   // Direct Arduino (Web Serial) refs.
   const serialSupported = useMemo(() => isWebSerialSupported(), []);
-  const serialConnectedRef = useRef(state.serialConnected);
-  useEffect(() => {
-    serialConnectedRef.current = state.serialConnected;
-  }, [state.serialConnected]);
   const serialHandleRef = useRef<SerialHandle | null>(null);
   const lastSerialApplyRef = useRef(0);
 
-  // --- Simulation loop -----------------------------------------------------
+  // --- Simulation loop (Demo Mode only) ------------------------------------
+  // The simulation runs ONLY while Demo Mode is on. When it's off, data comes
+  // from the Arduino (or nothing — the "waiting" state). This is why the app
+  // never shows random numbers unless you explicitly start a demo.
 
   const tick = useCallback(() => {
     if (pausedRef.current) return;
-    // When the Arduino drives the app (and we're not demoing), idle the sim.
-    if (!demoRef.current && serialConnectedRef.current) return;
+    if (!demoRef.current) return; // no demo -> no simulated data
 
     const prev = stateRef.current;
-    const { settings, demoMode, scenario } = prev;
-
-    let effective: Scenario = scenario;
-    if (!demoMode) {
-      if (spontaneousRef.current > 0) {
-        effective = 'ANOMALY';
-        spontaneousRef.current -= 1;
-      } else {
-        effective = 'NORMAL';
-        if (Math.random() < 0.012) spontaneousRef.current = 3;
-      }
-    }
-
     const reading = nextReading(
       prev.currentReading,
-      effective,
-      settings,
+      prev.scenario,
+      prev.settings,
       tickRef.current++,
     );
     const ns = applyReading(prev, reading, ALL_CONNECTED);
@@ -325,6 +377,7 @@ export function SystemProvider({ children }: { children: ReactNode }) {
       ...p,
       serialConnected: false,
       serialError: err ? 'Arduino disconnected unexpectedly.' : null,
+      ...(p.demoMode ? {} : awaitingReset(p.settings)),
     }));
   }, []);
 
@@ -345,7 +398,13 @@ export function SystemProvider({ children }: { children: ReactNode }) {
       });
       serialHandleRef.current = handle;
       lastSerialApplyRef.current = 0;
-      setState((p) => ({ ...p, serialConnected: true, serialError: null }));
+      setState((p) => ({
+        ...p,
+        serialConnected: true,
+        serialError: null,
+        // Start fresh so real readings aren't mixed with previous data.
+        ...(p.demoMode ? {} : connectingReset(p.settings)),
+      }));
     } catch (err) {
       if (isUserCancel(err)) return; // user dismissed the port picker
       setState((p) => ({
@@ -362,7 +421,12 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   const disconnectArduino = useCallback(async () => {
     const handle = serialHandleRef.current;
     serialHandleRef.current = null;
-    setState((p) => ({ ...p, serialConnected: false, serialError: null }));
+    setState((p) => ({
+      ...p,
+      serialConnected: false,
+      serialError: null,
+      ...(p.demoMode ? {} : awaitingReset(p.settings)),
+    }));
     await handle?.disconnect();
   }, []);
 
@@ -376,16 +440,26 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   // --- Actions -------------------------------------------------------------
 
   const setDemoMode = useCallback((on: boolean) => {
-    spontaneousRef.current = 0;
-    setState((prev) => ({
-      ...prev,
-      demoMode: on,
-      scenario: on ? prev.scenario : 'NORMAL',
-    }));
+    setState((prev) =>
+      on
+        ? { ...prev, demoMode: true, ...demoSeed(prev.settings) }
+        : {
+            ...prev,
+            demoMode: false,
+            scenario: 'NORMAL',
+            // Turning demo off returns to live: real data if connected, else wait.
+            ...(prev.serialConnected ? {} : awaitingReset(prev.settings)),
+          },
+    );
   }, []);
 
   const setScenario = useCallback((s: Scenario) => {
-    setState((prev) => ({ ...prev, scenario: s, demoMode: true }));
+    setState((prev) => ({
+      ...prev,
+      scenario: s,
+      demoMode: true,
+      ...(prev.demoMode ? {} : demoSeed(prev.settings)),
+    }));
   }, []);
 
   const setPaused = useCallback((p: boolean) => {
@@ -414,6 +488,8 @@ export function SystemProvider({ children }: { children: ReactNode }) {
 
   const dataSource: DataSource =
     !state.demoMode && state.serialConnected ? 'HARDWARE' : 'SIMULATED';
+  const awaitingData = !state.demoMode && !state.serialConnected;
+  const hasData = state.history.length > 0;
 
   const value = useMemo<SystemContextValue>(
     () => ({
@@ -428,6 +504,8 @@ export function SystemProvider({ children }: { children: ReactNode }) {
       demoMode: state.demoMode,
       scenario: state.scenario,
       paused: state.paused,
+      awaitingData,
+      hasData,
       serialSupported,
       serialConnected: state.serialConnected,
       serialError: state.serialError,
@@ -443,6 +521,8 @@ export function SystemProvider({ children }: { children: ReactNode }) {
     [
       state,
       dataSource,
+      awaitingData,
+      hasData,
       serialSupported,
       setDemoMode,
       setScenario,

@@ -2,13 +2,15 @@ import { Ruler, Gauge, Waves, Timer, Container, Box } from 'lucide-react';
 import { useSystem } from '@/store/SystemContext';
 import { PageHeader } from '@/components/common/PageHeader';
 import { RealTimeWaterChart } from '@/components/charts/RealTimeWaterChart';
+import { ConnectPrompt } from '@/components/common/ConnectPrompt';
 import { TankVisual } from '@/components/common/TankVisual';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { waterLevelStatus } from '@/components/cards/WaterLevelCard';
 import { distanceToVolumeLiters } from '@/data/mockData';
 
 export function WaterLevel() {
-  const { currentReading, settings } = useSystem();
+  const { currentReading, settings, hasData } = useSystem();
+  const awaiting = !hasData;
   const status = waterLevelStatus(currentReading.waterLevel);
   const volumeLiters = distanceToVolumeLiters(
     currentReading.distance,
@@ -21,31 +23,37 @@ export function WaterLevel() {
       icon: Gauge,
       label: 'Water Level',
       value: `${Math.round(currentReading.waterLevel)}%`,
+      live: true,
     },
     {
       icon: Ruler,
       label: 'Distance to Surface',
       value: `${currentReading.distance} cm`,
+      live: true,
     },
     {
       icon: Container,
       label: 'Water Volume',
       value: `${volumeLiters.toFixed(2)} L`,
+      live: true,
     },
     {
       icon: Waves,
       label: 'Tank Height',
       value: `${settings.tankHeight} cm`,
+      live: false,
     },
     {
       icon: Box,
       label: 'Cross-section',
       value: `${settings.tankCrossSection} cm²`,
+      live: false,
     },
     {
       icon: Timer,
       label: 'Sampling Interval',
       value: `${settings.samplingInterval}s`,
+      live: false,
     },
   ];
 
@@ -55,24 +63,34 @@ export function WaterLevel() {
         title="Water Level Monitoring"
         subtitle="Ultrasonic distance readings converted to tank fill level in real time."
         phase="MONITOR"
-        actions={<StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
+        actions={
+          <StatusBadge tone={awaiting ? 'neutral' : status.tone} dot={!awaiting}>
+            {awaiting ? 'NO DATA' : status.label}
+          </StatusBadge>
+        }
       />
+
+      <ConnectPrompt />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Tank visual */}
         <div className="card flex flex-col items-center justify-center p-6">
           <TankVisual
-            level={currentReading.waterLevel}
-            distance={currentReading.distance}
-            tone={status.tone}
+            level={awaiting ? 0 : currentReading.waterLevel}
+            distance={awaiting ? settings.tankHeight : currentReading.distance}
+            tone={awaiting ? 'neutral' : status.tone}
           />
           <div className="mt-4 text-center">
             <div className="section-title">Current Fill</div>
-            <div className="stat-value mt-1 text-3xl text-accent-400">
-              {Math.round(currentReading.waterLevel)}%
+            <div
+              className={`stat-value mt-1 text-3xl ${
+                awaiting ? 'text-slate-500' : 'text-accent-400'
+              }`}
+            >
+              {awaiting ? '—' : `${Math.round(currentReading.waterLevel)}%`}
             </div>
             <div className="mt-1 text-xs text-slate-400">
-              ≈ {volumeLiters.toFixed(2)} L
+              {awaiting ? 'no data' : `≈ ${volumeLiters.toFixed(2)} L`}
             </div>
           </div>
         </div>
@@ -81,6 +99,7 @@ export function WaterLevel() {
         <div className="grid grid-cols-2 gap-4 lg:col-span-2">
           {metrics.map((m) => {
             const Icon = m.icon;
+            const showDash = awaiting && m.live;
             return (
               <div key={m.label} className="card card-hover flex flex-col justify-between p-5">
                 <div className="flex items-center gap-2.5">
@@ -89,7 +108,11 @@ export function WaterLevel() {
                   </div>
                   <span className="section-title">{m.label}</span>
                 </div>
-                <div className="stat-value mt-4 text-3xl">{m.value}</div>
+                <div
+                  className={`stat-value mt-4 text-3xl ${showDash ? 'text-slate-500' : ''}`}
+                >
+                  {showDash ? '—' : m.value}
+                </div>
               </div>
             );
           })}

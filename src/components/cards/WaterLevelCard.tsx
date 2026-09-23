@@ -22,27 +22,38 @@ const ARC_COLOR: Record<Tone, string> = {
 export function WaterLevelCard({
   reading,
   volumeLiters,
+  awaiting = false,
 }: {
   reading: SensorData;
   volumeLiters?: number;
+  awaiting?: boolean;
 }) {
   const status = waterLevelStatus(reading.waterLevel);
+  const tone: Tone = awaiting ? 'neutral' : status.tone;
   return (
     <StatusCard
       icon={Waves}
       label="Water Level"
-      tone={status.tone}
-      badge={<StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
+      tone={tone}
+      badge={
+        <StatusBadge tone={tone} dot={!awaiting}>
+          {awaiting ? 'NO DATA' : status.label}
+        </StatusBadge>
+      }
       footer={
         <div className="space-y-1.5 text-sm">
           <div className="flex items-center justify-between">
             <span className="text-slate-400">Distance to surface</span>
-            <span className="stat-value">{reading.distance} cm</span>
+            <span className="stat-value">
+              {awaiting ? '—' : `${reading.distance} cm`}
+            </span>
           </div>
-          {volumeLiters !== undefined && (
+          {(awaiting || volumeLiters !== undefined) && (
             <div className="flex items-center justify-between">
               <span className="text-slate-400">Volume</span>
-              <span className="stat-value">{volumeLiters.toFixed(2)} L</span>
+              <span className="stat-value">
+                {awaiting ? '—' : `${volumeLiters!.toFixed(2)} L`}
+              </span>
             </div>
           )}
         </div>
@@ -50,10 +61,10 @@ export function WaterLevelCard({
     >
       <div className="flex items-center justify-center py-1">
         <CircularProgress
-          value={reading.waterLevel}
-          colorClass={ARC_COLOR[status.tone]}
-          label={`${Math.round(reading.waterLevel)}%`}
-          sublabel="of tank"
+          value={awaiting ? 0 : reading.waterLevel}
+          colorClass={awaiting ? 'text-slate-600' : ARC_COLOR[status.tone]}
+          label={awaiting ? '—' : `${Math.round(reading.waterLevel)}%`}
+          sublabel={awaiting ? 'no data' : 'of tank'}
         />
       </div>
     </StatusCard>
