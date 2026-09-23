@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { DemoModePanel } from '@/components/common/DemoModePanel';
+import { SerialStatusBanner } from '@/components/common/SerialStatusBanner';
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -19,6 +20,7 @@ export function Layout() {
           onDemoClick={() => setDemoOpen(true)}
         />
         <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+          <SerialStatusBanner />
           <Outlet />
         </main>
       </div>

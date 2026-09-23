@@ -61,6 +61,13 @@ export async function connectArduino(opts: ConnectOptions): Promise<SerialHandle
   const port = await nav.serial.requestPort();
   await port.open({ baudRate: opts.baudRate ?? 9600 });
 
+  // Some boards only start sending once DTR/RTS are asserted. Best-effort.
+  try {
+    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+  } catch {
+    /* not supported on every platform */
+  }
+
   const decoder = new TextDecoderStream();
   const readableClosed: Promise<void> = port.readable
     .pipeTo(decoder.writable)
@@ -71,6 +78,7 @@ export async function connectArduino(opts: ConnectOptions): Promise<SerialHandle
 
   let stopped = false;
   let buffer = '';
+  let logged = 0; // log the first lines to the console to aid debugging
 
   const pump = async () => {
     try {
@@ -83,7 +91,14 @@ export async function connectArduino(opts: ConnectOptions): Promise<SerialHandle
         while ((idx = buffer.indexOf('\n')) >= 0) {
           const line = buffer.slice(0, idx).replace(/\r$/, '').trim();
           buffer = buffer.slice(idx + 1);
-          if (line) opts.onLine(line);
+          if (line) {
+            if (logged < 20) {
+              // eslint-disable-next-line no-console
+              console.log('[Arduino]', line);
+              logged += 1;
+            }
+            opts.onLine(line);
+          }
         }
       }
     } catch (err) {

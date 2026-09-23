@@ -311,6 +311,8 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   const serialSupported = useMemo(() => isWebSerialSupported(), []);
   const serialHandleRef = useRef<SerialHandle | null>(null);
   const lastSerialApplyRef = useRef(0);
+  const serialReceivedRef = useRef(false); // any bytes parsed since connecting
+  const serialWarnTimerRef = useRef<number | undefined>(undefined);
 
   // --- Simulation loop (Demo Mode only) ------------------------------------
   // The simulation runs ONLY while Demo Mode is on. When it's off, data comes
@@ -344,6 +346,14 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   const handleSerialLine = useCallback((line: string) => {
     const parsed = parseSerialLine(line);
     if (!parsed) return;
+
+    // We got valid data — cancel the "no data" warning.
+    serialReceivedRef.current = true;
+    if (serialWarnTimerRef.current !== undefined) {
+      window.clearTimeout(serialWarnTimerRef.current);
+      serialWarnTimerRef.current = undefined;
+    }
+
     // Throttle the Arduino's ~10 Hz output to the dashboard's sampling cadence.
     const gap = settingsRef.current.samplingInterval * 1000 * 0.85;
     const nowMs = Date.now();
@@ -367,12 +377,16 @@ export function SystemProvider({ children }: { children: ReactNode }) {
         aiStatus,
         anomalyScore,
       };
-      return applyReading(p, reading, ALL_CONNECTED);
+      return { ...applyReading(p, reading, ALL_CONNECTED), serialError: null };
     });
   }, []);
 
   const handleSerialClose = useCallback((err?: string) => {
     serialHandleRef.current = null;
+    if (serialWarnTimerRef.current !== undefined) {
+      window.clearTimeout(serialWarnTimerRef.current);
+      serialWarnTimerRef.current = undefined;
+    }
     setState((p) => ({
       ...p,
       serialConnected: false,
@@ -405,6 +419,25 @@ export function SystemProvider({ children }: { children: ReactNode }) {
         // Start fresh so real readings aren't mixed with previous data.
         ...(p.demoMode ? {} : connectingReset(p.settings)),
       }));
+
+      // If no data arrives soon after connecting, tell the user why.
+      serialReceivedRef.current = false;
+      if (serialWarnTimerRef.current !== undefined) {
+        window.clearTimeout(serialWarnTimerRef.current);
+      }
+      serialWarnTimerRef.current = window.setTimeout(() => {
+        if (!serialReceivedRef.current) {
+          setState((p) =>
+            p.serialConnected
+              ? {
+                  ...p,
+                  serialError:
+                    'Connected, but no data is coming from the Arduino. Close the Arduino IDE Serial Monitor (only one program can use the port at a time), check the USB cable, and make sure the sketch prints at 9600 baud.',
+                }
+              : p,
+          );
+        }
+      }, 5000);
     } catch (err) {
       if (isUserCancel(err)) return; // user dismissed the port picker
       setState((p) => ({
@@ -421,6 +454,10 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   const disconnectArduino = useCallback(async () => {
     const handle = serialHandleRef.current;
     serialHandleRef.current = null;
+    if (serialWarnTimerRef.current !== undefined) {
+      window.clearTimeout(serialWarnTimerRef.current);
+      serialWarnTimerRef.current = undefined;
+    }
     setState((p) => ({
       ...p,
       serialConnected: false,
@@ -433,6 +470,9 @@ export function SystemProvider({ children }: { children: ReactNode }) {
   // Release the port if the provider unmounts while still connected.
   useEffect(() => {
     return () => {
+      if (serialWarnTimerRef.current !== undefined) {
+        window.clearTimeout(serialWarnTimerRef.current);
+      }
       void serialHandleRef.current?.disconnect();
     };
   }, []);
